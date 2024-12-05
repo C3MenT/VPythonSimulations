@@ -1,0 +1,387 @@
+Web VPython 3.2
+
+scene.title = "3D Ricochet Demo by Ri'chard McCray\n"
+scene.width = 1080
+scene.height = 720
+
+
+def PlotFunction(x, y):
+    #f = exp(-(x**2 + y**2)) # Gaussian
+    #f = sin(x) + cos(y)
+    #f = sin(x)^2 + cos(y)^2
+    #f = ((x^2)+(y^2))/2
+    #f = (y^2)-(x^2)
+    #f = (1/5) * (x**2 - y**2)
+    #f = ((x^2)/6)-((y^2)/6)
+    #f = 1
+    f = x + y
+    return f
+
+dimensions = 10
+
+xmin = -dimensions
+xmax = dimensions
+ymin = -dimensions
+ymax = dimensions
+
+zmax = -1*(10^100)
+
+borders = [
+    # north
+    quad(vs=[
+        vertex(pos=vec(xmin,zmax,ymax)),
+        vertex(pos=vec(xmax,zmax,ymax)),
+        vertex(pos=vec(xmin,-zmax,ymax)),
+        vertex(pos=vec(xmax,-zmax,ymax))
+        ]),
+    # east
+    quad(vs=[
+        vertex(pos=vec(xmax,zmax,ymin)),
+        vertex(pos=vec(xmax,zmax,ymax)),
+        vertex(pos=vec(xmax,-zmax,ymin)),
+        vertex(pos=vec(xmax,-zmax,ymax))
+        ]),
+    # south
+    quad(vs=[
+        vertex(pos=vec(xmin,zmax,ymin)),
+        vertex(pos=vec(xmax,zmax,ymin)),
+        vertex(pos=vec(xmin,-zmax,ymin)),
+        vertex(pos=vec(xmax,-zmax,ymin))
+        ]),
+    # west
+    quad(vs=[
+        vertex(pos=vec(xmin,zmax,ymin)),
+        vertex(pos=vec(xmin,zmax,ymax)),
+        vertex(pos=vec(xmin,-zmax,ymin)),
+        vertex(pos=vec(xmin,-zmax,ymax))
+        ]),
+    ]
+for border in borders:
+    border.visible = False
+
+dx = 0.5 # Grid Size
+
+# List that holds all vertices
+VerticeList = []
+
+
+# Function converts a given coordinate to a best fit index for the vertex array
+# based on the value of dx (how far appart vertices are)
+
+# the coordinate should match to an index
+# the index is some int-instances of dx (or product of some int and dx)
+# therfore, the coord will round to this int value based on what coord is
+def coords_to_indices(self, coords=vec(0,0,0)):
+    # There are N many dx's in the list so how many dx's is in this int
+    # well we divide by dx and round the quotient to the neares dx multiple
+    # when then slide this value forward/backward by an offset since array indices
+    # cannot be negative and must start at 0
+    # The offset is the current coordinate - the minimum coord in that axis
+    # Ex: So if the minimum x is negative a positive magnitude of that minimum
+    # is added to the taken coord of the object to no longer be negative (and aligned)
+    # (Ex: if the minimum x is a larger positive number, the magnitude of that minimum
+    # is subtracted from the current coord to give the coords parallel representation
+    # for if it started from 0 (aligning it also)
+    # The value is then divided by the amount of steps between the min and max
+    # for the correct index value based on the population loops that use dx
+    # Finally, rounding this value (down cause code starts at 0 not 1) gives us
+    # a guarenteed multiple of the step which every vertex coord should be
+    x_index = floor((coords.x - xmin)/dx)
+    z_index = floor((coords.z - ymin)/dx)
+    # These calculations will still give us 1∪(N-1) or 1∪(M -1)inclusive so we should check
+    # for that
+    if x_index >= N-2:
+        x_index = N-3
+    if z_index == M-2:
+        z_index = M-3
+    return vec(x_index, 0, z_index) # The "z"(y) value should never be used
+    
+
+# Populate Field
+for x in range(xmin, xmax, dx):
+    TempList = []
+    for z in range(ymin, ymax, dx):
+        # Z is the output of the plot function
+        y = PlotFunction(x, z)
+        zmax = max(y, zmax)
+        
+        # Since the vertice list is a list of lists we start with temp list for each y
+        TempList.append(vertex(pos=vec(x,y,z), color=color.purple))
+    # Append temp lists for each x
+    VerticeList.append(TempList)
+    # In this way Vertice list will technically have:
+    #   An X array index (for each temp list in main one)
+    #   A Y array index (for each vertice in temp list)
+    # Hereby, x and y are given by the loops and z is given by the function
+
+
+N = len(VerticeList)
+M = len(VerticeList[0])
+#print(N)
+#print(M)
+
+# Color rescaling
+for ind_x in range(0, N):
+    for ind_y in range(0, N):
+        red = VerticeList[ind_x][ind_y].pos.y / zmax # Kind of like getting a decimal percentage of z
+        blue = 1 - red
+        green = 0
+        VerticeList[ind_x][ind_y].color = vec(red, green, blue)
+        
+# Triangle Polygon Drawing
+Triangles = []
+NormalArrows = []
+for ind_x in range(1, N-1):
+    TempList = [] # List that keeps track of diamonds created
+    for ind_y in range(1, M-1):
+        TempDiamond = [] # List that keeps the four triangles that makes up current diamond
+        # Each triangle has three vertices
+        # We want a grid made up of equal sized squares
+        # So we have four triangles to make in order to fill in the space of a square within the grid
+        # We do this with four different triple combinations of the vertices we just determined
+        # AKA This creates a diamond shape with one vertice in the center of every "square" (diamond) polygon
+        # Vertices with an X value of N or a y value of N are not centers and therefore cause crashing in the loop
+        # Center point, point to right, point above center
+        TempDiamond.append(
+            triangle(
+                vs=[VerticeList[ind_x][ind_y], VerticeList[ind_x - 1][ind_y], VerticeList[ind_x][ind_y + 1]],
+                normal=norm(
+                    cross((VerticeList[ind_x - 1][ind_y].pos-VerticeList[ind_x][ind_y].pos), (VerticeList[ind_x][ind_y + 1].pos-VerticeList[ind_x - 1][ind_y].pos))
+                )
+            )
+        )
+        # Center point, point to left, point above center
+        TempDiamond.append(
+            triangle(
+                vs=[VerticeList[ind_x][ind_y], VerticeList[ind_x + 1][ind_y], VerticeList[ind_x][ind_y + 1]],
+                normal=norm(
+                    cross((VerticeList[ind_x + 1][ind_y].pos-VerticeList[ind_x][ind_y].pos),(VerticeList[ind_x][ind_y + 1].pos-VerticeList[ind_x + 1][ind_y].pos))
+                )
+            )
+        )
+        # Center point, point to right, point below center
+        TempDiamond.append(
+            triangle(
+                vs=[VerticeList[ind_x][ind_y], VerticeList[ind_x - 1][ind_y], VerticeList[ind_x][ind_y - 1]],
+                normal=norm(
+                    cross(
+                        (VerticeList[ind_x - 1][ind_y].pos-VerticeList[ind_x][ind_y].pos),(VerticeList[ind_x][ind_y - 1].pos-VerticeList[ind_x - 1][ind_y].pos)
+                    )
+                )
+            )
+        )
+        # Center point, point to left, point below center
+        TempDiamond.append(
+            triangle(
+                vs=[VerticeList[ind_x][ind_y], VerticeList[ind_x + 1][ind_y], VerticeList[ind_x][ind_y - 1]],
+                normal=norm(
+                    cross((VerticeList[ind_x + 1][ind_y].pos-VerticeList[ind_x][ind_y].pos),(VerticeList[ind_x][ind_y - 1].pos-VerticeList[ind_x + 1][ind_y].pos))
+                )
+            )
+        )
+        # We will keep the four triangles in these 3rd Dimension lists
+        TempList.append(TempDiamond) 
+    Triangles.append(TempList)
+
+for column in Triangles:
+    for diamond in column:
+        for tri in diamond:
+            if tri.normal.y < 0:
+                tri.normal *= -1
+            NormalArrows.append(arrow(pos=tri.v0.pos, axis=tri.normal, round=True, shaftwidth=0.01, opacity = 1))
+
+
+O = len(Triangles)
+P = len(Triangles[0])
+print("Triangles: " + O)
+print("Vertices: " + P)
+
+# Create the ball(s)
+AmntBalls = 1
+Balls = []
+
+initial_velocity = vec(8,0,5)
+
+ball = sphere(
+    # at the orgin, 5 units above the vertex that is currently there
+    pos=(VerticeList[xmax/2][xmin/2].pos+vec(0,5,0)), radius=1, make_trail=True,
+    # Kinematic Members
+    mass=1, velocity=initial_velocity, acceleration=vec(0,0,0), collisions = 0,
+    
+)
+# Arrow for direction the ball is moving in
+ball_direction_arrow = arrow(pos=ball.pos, axis=ball.velocity, shaftwidth=0.05)
+NormalArrows.append(ball_direction_arrow)
+
+#ball_pos_label=label(text=ball.pos, pos=ball.pos)
+#ball_vel_label=label(text=ball.velocity, pos=ball.pos + vec(0,3,0))
+collisions_num = 0
+################### Physics Algorithm ################### 
+
+# Delta t
+dt = 0.005
+# Gravity Acceleration
+gravity = 9.81
+# Damping Constant (For simplistic implimentation)
+damping = 0
+# Magnitude of User Influence on Ball Speed
+ball_speed = 5
+
+check_col = True
+
+### Kinematic Functions
+def phys_proc(self, object):
+    # Apply Gravity if not on surface
+    #if not (object.pos.y - object.radius) == temp_vertex.pos.y:
+    object.velocity.y -= gravity * dt
+    
+    # Move object at velocity
+    object.pos += object.velocity * dt
+    
+    ### Collision ###
+    if isinstance(object, sphere):
+        #ball_pos_label.text = ball.pos
+        #ball_vel_label.text = ball.velocity
+
+        ### First Check Scene "Boundaries"
+        # In the X
+        if (object.pos.x - object.radius) <= xmin: # Too far backward on X?
+            object.velocity.x = abs(object.velocity.x) # Turn forward on X
+            object.pos.x += object.velocity.norm().x * object.radius
+            #ball.collisions += 1
+            #print("X collision " + ball.collisions)
+        elif (object.pos.x + object.radius) >= xmax: # Too far forward on X?
+            object.velocity.x = -1 * abs(object.velocity.x) # Turn backward on X
+            object.pos.x += object.velocity.norm().x * object.radius
+            #object.pos.x = xmax
+            #ball.collisions += 1
+            #print("X collision " + ball.collisions)
+        # In the Z
+        if (object.pos.z - object.radius) <= ymin:# Too far backward on "Y"(Z)?
+            object.velocity.z = abs(object.velocity.z) # Turn forward on "Y"(Z)
+            object.pos.z += object.velocity.norm().z * object.radius
+            #object.pos.z = ymin
+            #ball.collisions += 1
+            #print("Z collision " + ball.collisions)
+        elif(object.pos.z + object.radius) >= ymax: # Too far forward on "Y"(Z)?
+            object.velocity.z = -1 * object.velocity.z # Turn backward on "Y"(Z)
+            object.pos.z += object.velocity.norm().z * object.radius
+            #object.pos.z = ymax
+            #ball.collisions += 1
+            #print("Z collision " + ball.collisions)
+        
+
+        ### Now Check Field        
+        # Convert the object's coords to two indices in the 2D array
+        relevant_vertex_coords = coords_to_indices(coords=object.pos)
+            
+        # Get Triangle closest to object's coords; x or "y"(z) inputted rounded (need int) into 2D array.
+        # This technically could be any 4 that make up the diamond with this coord so they're randomly selected
+        temp_tri = Triangles[relevant_vertex_coords.x][relevant_vertex_coords.z][floor(random() % 4)]
+            
+        # Get vertex relevant ot triangle 
+        #temp_vertex = VerticeList[coord_to_index(coord=object.pos.x)][coord_to_index(coord=object.pos.z)]
+        temp_vertex = temp_tri.v0
+        
+        # Create arrow for debug
+        #vert_to_obj_arrow = arrow(pos=temp_tri.v0.pos, axis=(object.pos - temp_tri.v0.pos), shaftwidth =0.01, color=color.red)
+        #vert_to_obj_arrow = arrow(pos=temp_vertex.pos, axis=(object.pos - temp_vertex.pos), shaftwidth =0.01, color=color.red)        
+        #print((temp_vertex.pos - object.pos).mag)
+        #print(temp_vertex.pos)
+        #print(temp_tri.normal)
+        
+        if ((temp_vertex.pos - object.pos).mag < object.radius): #or (object.pos.y - object.radius < temp_vertex.pos.y):
+            #print(object.velocity.mag)  
+            #print(object.velocity)
+            #print(damping)
+            object_normal = norm(object.velocity)
+            # If both normals have opposite signs
+            if (sign(object_normal.x) != sign(temp_tri.normal.x)) and !(sign(temp_tri.normal.x) == 0):
+                object.velocity.x = -1 * ((object.velocity.x) - (object.velocity.x * damping))
+                #object.pos.x += object.velocity.norm().x #* object.radius
+                #print("After X " + object.velocity)
+            if (sign(object_normal.y) != sign(temp_tri.normal.y)) and !(sign(temp_tri.normal.y) == 0):
+                object.velocity.y = -1 * ((object.velocity.y) - (object.velocity.y * damping))
+                #object.pos.y += object.velocity.norm().y #* object.radius
+                #print("After Y " + object.velocity)
+            if (sign(object_normal.z) != sign(temp_tri.normal.z)) and !(sign(temp_tri.normal.z) == 0):
+                object.velocity.z = -1 * ((object.velocity.z) - (object.velocity.z * damping))
+                #object.pos.z += object.velocity.norm().z #* object.radius
+                #print("After Z " + object.velocity)
+            #object.velocity = object_normal.dot(temp_vertex.normal) * object_normal.norm()
+        #vert_to_obj_arrow.visible = False
+        
+    
+
+
+frame_cap = 120
+
+# Camera Control
+scene.autoscale = False
+scene.camera.follow(ball)
+
+### UI
+# Damping 
+def update_sl_damp(self):
+    sl_damping_label.text = 'Damping Constant: ' + sl_damping.value
+    damping = sl_damping.value
+    
+def update_sl_ball_speed(self):
+    sl_ball_speed_label.text='External Force: ' + sl_ball_speed.value
+    ball_speed = sl_ball_speed.value
+
+def upd_norm_arws(evt):
+    if evt.checked:
+        for arw in NormalArrows:
+            arw.visible = True
+    else:
+        for arw in NormalArrows:
+            arw.visible = False
+    
+
+scene.append_to_caption("w,a,s,d / up,left,down,right: Move Ball on XY")
+scene.append_to_caption("\n\n")
+sl_damping = slider(bind=update_sl_damp, max=1, min=0, value=damping, step=0.01)
+sl_damping_label = wtext(text='Damping Constant: ' + sl_damping.value)
+scene.append_to_caption("\n\n")
+sl_ball_speed = slider(bind=update_sl_ball_speed, max=50, min=0, value=ball_speed)
+sl_ball_speed_label = wtext(text='External Force: ' + sl_ball_speed.value)
+scene.append_to_caption("\n\n")
+ckbx_show_normals = checkbox(bind=upd_norm_arws, text="Show Normal Vectors", checked=True)
+scene.append_to_caption("\n\n")
+
+t = 0.0
+g_graph = graph(title='Data Graph')
+gc_time_velocity = gcurve(label = 'Velocity', color=color.blue, graph=g_graph, data=[(0,0)])
+gc_time_ke = gcurve(label = 'KE', color=color.orange, graph=g_graph, data=[(0,0)])
+gc_time_pe = gcurve(label = 'PE', color=color.purple, graph=g_graph, data=[(0,0)])
+scene.append_to_caption("\n\n")
+
+while(True):
+    # frame setting
+    rate(frame_cap)
+    
+    # Ball Control
+    if 'd' in keysdown() or 'right' in keysdown():
+        #scene.camera.pos += vec(1,0,0) * camera_speed * dt
+        ball.velocity += vec(1,0,0) * dt * ball_speed
+    if 'a' in keysdown() or 'left' in keysdown():
+        #scene.camera.pos += vec(-1,0,0) * camera_speed * dt
+        ball.velocity += vec(-1,0,0) * dt * ball_speed
+    if 's' in keysdown() or 'down' in keysdown():
+        #scene.camera.pos += vec(0,0,1) * camera_speed * dt
+        ball.velocity += vec(0,0,1) * dt * ball_speed
+    if 'w' in keysdown() or 'up' in keysdown():
+        #scene.camera.pos += vec(0,0,-1) * camera_speed * dt
+        ball.velocity += vec(0,0,-1) * dt * ball_speed
+    
+    # Physics Process
+    phys_proc(object = ball)
+    ball_direction_arrow.pos = ball.pos
+    ball_direction_arrow.axis = ball.velocity * 0.5
+    
+    t+=dt
+    gc_time_velocity.plot(t, ball.velocity.mag)
+    gc_time_ke.plot(t, ball.mass * (ball.velocity.mag^2) * 0.5)
+    gc_time_pe.plot(t, ball.mass * gravity * ball.pos.y)
+    

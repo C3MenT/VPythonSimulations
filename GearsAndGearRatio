@@ -1,6 +1,7 @@
 Web VPython 3.2
 
 # Scene Vars
+scene.title = "Gear Ratio Simulation by Ri'chard McCray"
 dt = 0.01
 frame_cap = 120
 scene.width = 1080

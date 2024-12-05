@@ -1,0 +1,443 @@
+Web VPython 3.2
+
+scene.title = "Rocket Simulation by Ri'chard McCray"
+scene.background = vec(1,1,1)
+scene.width = 1280
+scene.height = 720
+scene.align = 'none'
+
+### Set Dressing
+LaunchPad = box(pos=vec(0,0,0), size=vec(25, 1, 25), color=vec(0.1,0.1,0.1), shininess=0.1)
+TheGround = box(pos=vec(0,-1,0), size=vec(200+LaunchPad.size.x*2, 1, 200+LaunchPad.size.z*2), color=vec(0.1,0.5,0.1), shininess=0.1)
+
+Trees = []
+
+def spawn_trees(MaxTrees, MinTrees, MaxTreeHeight):
+    for i in range((random()*(MaxTrees-MinTrees))+MinTrees):
+        # Prevent trunks from appearing within launchpad dimensions
+        chosen_x = 0
+        chosen_z = 0
+        # Chose left (<0.5) or right (>0.5) of launch pad
+        if random() < 0.5:
+            chosen_x = (LaunchPad.pos.x - LaunchPad.size.x - random()*100)
+        else:
+            chosen_x = (random()*100 + LaunchPad.pos.x + LaunchPad.size.x)
+        # Chose back (<0.5) or front (>0.5) of launch pad
+        if random() < 0.5:
+            chosen_z = (LaunchPad.pos.x - LaunchPad.size.z - random()*100)
+        else:
+            chosen_z = (random()*100 + LaunchPad.pos.x + LaunchPad.size.z)
+        # Create Trunk with random parameters within restrictions
+        trunk = cylinder(
+            pos=vec(chosen_x, -1, chosen_z),
+            axis=vec(0, random()*MaxTreeHeight+1, 0),
+            radius=random(),
+            color=vec( (random()*(160-80)/225 + (160-80)/225), (random()*(80-50)/225 + (80-50)/225), (random()*(60-30)/225 + (60-30)/225)),
+            shininess = 0,
+            )
+        
+        main_leaf = sphere(pos=vec(trunk.pos.x,trunk.pos.y+trunk.length,trunk.pos.z), radius=random()+1, 
+            color=vec(0,random()*(80-50)/225 + (80-50)/225,0))
+            
+        Trees.append(compound([trunk, main_leaf]))
+
+spawn_trees(50, 50, 8)
+
+# default sky particle params
+MaxParticles = 50
+MinParticles = 10
+
+Clouds = []
+Stars = []
+def spawn_sky_particles(anchor_height, color_vec, stars, avg_size, MaxParticles, MinParticles):
+    SkyParticles = []
+    #print("Reached 1")
+    for i in range((random()*(MaxParticles-MinParticles))+MinParticles):
+        #print("loop index ("+i+")")
+        if stars:
+            #print("Reached 2a")
+            SkyParticles.append(sphere(pos=vec( (2*(random()-0.5))*100, (2*(random()-0.5))*100 + anchor_height, (2*(random()-0.5))*100 ), radius = random()*avg_size+1, color=color_vec, emissive=True, visible=False))
+            
+            #print("Reached 3a")
+        else: # Clouds
+            #print("Reached 2b")
+            temp_cloud_parts = []
+            #print("Reached 3b")
+            temp_cloud_parts.append(
+                sphere(
+                    pos=vec( (2*(random()-0.5))*100, (2*(random()-0.5))*100 + anchor_height, (2*(random()-0.5))*100 ),
+                    radius = random()*avg_size+1,
+                    color = color_vec,
+                    emissive = False,
+                )
+            )
+            #print("Reached 4b")
+            for i in range(random()*10):
+                temp_cloud_parts.append(
+                    sphere(
+                        pos=vec(
+                            temp_cloud_parts[0].pos.x + ((random() - (temp_cloud_parts[0].radius/2) )*2), # We slide the range back by half the radius and mult by 2 to get
+                            temp_cloud_parts[0].pos.y + ((random() - (temp_cloud_parts[0].radius/2) )*2), # a range that is from (-) radius to (+) radius for the center of
+                            temp_cloud_parts[0].pos.z + ((random() - (temp_cloud_parts[0].radius/2) )*2) # additional cloud pieces to be placed
+                            ),
+                        radius = random()*avg_size+1,
+                        color=color_vec,
+                        emissive=False,
+                    )
+                )
+            
+            SkyParticles.append(compound(temp_cloud_parts, visible=False))
+    
+    return SkyParticles
+    
+    """ WHY CAN'T YOU FREE MEMORY IN VPYTHON THIS IS COMPLETELY STUPID
+    if len(SkyParticles) > 100:
+        SkyParticles.clear()
+    
+    CanCollect = False
+    AmountInvaid = 0
+    for particle in SkyParticles:
+        #if particle not in scene.objects:
+        if mag(Rocket.pos - particle.pos) > 1000 and particle.visible == True:
+            particle.visible = False
+            particle.can_del = True
+            AmountInvaid++
+            CanCollect = True
+    to_del = []
+    for i in range(AmountInvaid):
+        to_del.append(SkyParticles.pop(can_del))
+   
+    for particle in SkyParticles:
+        if particle.visible == False:
+            SkyParticles.remove(particle)
+    """
+
+
+# Function that moves the "oldest" (lowest) sky particle of the specified list up
+# above the current position of the Rocket since Vpython does not allow users to
+# free memory for some utterly idiotic reason
+# If moving up, put particles above us and vice-versa
+# The calling function should determine whether or not this should happen in the
+# first place such as what height to call this at.
+def move_sky_particle(ParticleList):
+    # If we are moving up
+    if Rocket.velocity.y > 100 and Rocket.velocity.y % 30 > 7:
+        # Start with first for comparison
+        lowest = ParticleList[0]
+        for particle in ParticleList:
+            if particle.pos.y < lowest.pos.y:
+                lowest = particle
+        lowest.pos=vec( Rocket.pos.x + (2*(random()-0.5))*100, (2*(random()-0.5))*100 + Rocket.pos.y, Rocket.pos.z + (2*(random()-0.5))*100 )
+        lowest.visible = True
+        
+    elif Rocket.velocity.y < -100 and Rocket.velocity.y % 30 < -7: 
+        # Start with first for comparison
+        highest = ParticleList[0]
+        for particle in ParticleList:
+            if particle.pos.y > highest.pos.y:
+                highest = particle
+        highest.pos=vec( Rocket.pos.x + (2*(random()-0.5))*100, Rocket.pos.y - (2*(random()-0.5))*100,  Rocket.pos.z + (2*(random()-0.5))*100 )
+        highest.visible = True
+
+
+def explode(particle_speed):
+    particles = []
+    for i in range(random()*100 + 100):
+        particles.append(
+            sphere(
+                pos=Rocket.pos,
+                radius=random()*0.4,
+                color=vec(random(), (random()*(70-50)/225 + (70-50)/225), 0),
+                velocity = vec(((random()-0.5)*2)*particle_speed, random()*particle_speed, ((random()-0.5)*2)*particle_speed),
+            )
+        )
+    #ExplosionParticles = particles
+    return particles
+        
+
+### Rocket Construction
+r_height = 20 # height in units
+r_radius = 3 # radius around body and nose
+RocketNose = cone(pos=vec(0,r_height*(80/100),0), size=vec(r_height*(20/100),r_radius,r_radius), axis=vec(0,1,0))
+RocketBody = cylinder(pos=vec(0,r_height*(20/100),0), size=vec(r_height*(60/100),r_radius,r_radius), axis=vec(0,1,0))
+RocketTail = pyramid(pos=vec(0,0,0), size=vec(r_height*(30/100),r_height*(60/100),r_height*(60/100)), axis=vec(0,1,0))
+Rocket = compound([RocketNose,RocketBody,RocketTail], axis=vec(1,0,0), color=vec(random(),random(),random()), make_trail=True, origin=vec(0,0,0), shininess=1,
+    # Kinematic Vars
+    velocity=vec(0,0,0), direction = vec(0,1,0),
+    # Rocket Data
+    mass_og=3500, mass_total=3500, mass=2500, mass_fuel=1000, dm = 100, velocity_ex=200
+)
+arr_rocket_face = arrow(pos=Rocket.pos, axis=Rocket.axis, shaftwidth=0.5, color=color.orange)
+arr_rocket_up = arrow(pos=Rocket.pos, axis=Rocket.up, shaftwidth=0.5, color=color.blue)
+arr_rocket_dir = arrow(pos=Rocket.pos, axis=Rocket.direction, shaftwidth=0.5, color=color.red)
+
+##### Aux Functions #####
+# Rocket mass DE function
+dm_func = 'Rocket.dm'
+def rocket_fuel_dm(self, time):
+    return eval(dm_func)
+
+
+### Loop Vars
+dt = 0.05
+Launched = False
+Running = False
+Landed = False
+Escaped = False # If escaped atmosphere
+
+MovingParticles = [] # All additional particles to be affected by phys_proc
+Clouds = spawn_sky_particles(Rocket.pos.y, color.white, False, 5, 100, 80)   
+Stars = spawn_sky_particles(Rocket.pos.y, color.white, True, 1, 100, 80)
+
+
+### Physics Constants
+gravity = 9.81/1000
+AtmosHeight = 630000 #meters
+LowCloudHeight = 2000
+MidCloudHeight = 7000
+HighCloudHeight = 16500
+CloudEndHeight = 300000
+
+# Graph Data
+g_graph = graph(title='Velocity and Mass Graph', xtitle='Time', ytitle='Mass and Velocity', align='left', width=600, height=600)
+pos_graph = graph(title='Position Graph', xtitle='Time', ytitle='Height', align='right', width=600, height=600)
+gc_time_height = gcurve(color=color.black, data=[(0,0)], graph=pos_graph, label='Height')
+gc_time_mass = gcurve(color=color.blue, data=[(0,Rocket.mass_total)], graph=g_graph, label='Mass')
+gc_time_vel = gcurve(color=color.orange, data=[(0,0)], graph=g_graph, label='Velocity (Magnitude)')
+
+# Phys Proc
+def phys_proc(self, time):
+    if not Landed:
+        ### Propulsion
+        if Rocket.mass_fuel > 0:
+            # Add the acceleration due to propulsion to the rocket's velocity in its direction
+            Rocket.velocity += Rocket.direction * -1 * (Rocket.velocity_ex * log(Rocket.mass_total/Rocket.mass_og)) * dt
+            if Rocket.mass_fuel - (Rocket.dm * dt) < 0:
+                # If the next reduction of fuel will lower us to 0, just make it 0
+                Rocket.mass_fuel = 0
+            else:
+                # Reduce the mass of the fuel by dm
+                Rocket.mass_fuel -= Rocket.dm * dt
+            # Recalculate the total mass of the rocket
+            Rocket.mass_total = Rocket.mass + Rocket.mass_fuel
+    
+        # If not about to land on ground
+        if not (Rocket.pos + Rocket.velocity * dt).y < LaunchPad.pos.y:
+            # Gravity
+            if not Rocket.pos.y > AtmosHeight:
+                Rocket.velocity -= vec(0, gravity * Rocket.mass, 0) * dt
+            else:
+                if not Escaped:
+                    print("Escaped Atmosphere")
+                    Escaped = True
+                    gc_time_height.color = vec(0.2,0.2,0.2)
+                    
+            #Rocket.axis = norm(Rocket.velocity.rotate(axis=vec(0,0,1), angle= -1*pi/2))
+            
+            Rocket.pos += Rocket.velocity * dt
+        
+        # About to land
+        else:
+            Rocket.pos.y = 0
+            MovingParticles = explode(50)
+            Landed = True
+        
+        TheGround.pos.x = Rocket.pos.x
+        TheGround.pos.z = Rocket.pos.z
+    else:
+    #if len(MovingParticles) != 0:
+        for fx in MovingParticles:
+            fx.pos += fx.velocity*dt
+    
+def update_background(self):
+    # 630,000km is the distance atmosphere is from surface
+    # colors go from 0-1
+    # We want the height to determine what amount of 1 to choose for each
+    # color channel
+    # But we also want the value to decrease as we near 1
+    
+    r = 0.3 - ((Rocket.pos.y/AtmosHeight) * 0.3)
+    g = 0.3 - ((Rocket.pos.y/AtmosHeight) * 0.3)
+    b = 1 - ((Rocket.pos.y/AtmosHeight) * 1)
+    
+    scene.background = vec(r, g, b)
+    
+    ### Sky Particles
+    if Rocket.pos.y > 2000:
+        if Rocket.pos.y >= (AtmosHeight):
+            #spawn_sky_particles(Rocket.pos.y + 100, color.white, True, 1, 5, 1)
+            move_sky_particle(Stars)
+        else:
+            # Low level thin clouds
+            if Rocket.pos.y > LowCloudHeight and Rocket.pos.y < MidCloudHeight:
+                #spawn_sky_particles(Rocket.pos.y + 100, color.white, False, 3, 10, 1)
+                move_sky_particle(Clouds)
+            # Mid level thick clouds
+            elif Rocket.pos.y > MidCloudHeight and Rocket.pos.y < HighCloudHeight:
+                #spawn_sky_particles(Rocket.pos.y + 100, color.white, False, 5, 10, 1)
+                move_sky_particle(Clouds)
+            # High level thinner clouds
+            elif Rocket.pos.y > HighCloudHeight and Rocket.pos.y < CloudEndHeight:
+                #spawn_sky_particles(Rocket.pos.y + 100, color.white, False, 2, 10, 1)
+                move_sky_particle(Clouds)
+    
+    """
+    if Rocket.pos.y >= (100000) and Rocket.pos.y <= (150000):
+        spawn_sky_particles(Rocket.pos.y + 100, color.white, False, 100, 20)
+    elif Rocket.pos.y >= (200000) and Rocket.pos.y <= (250000):
+        spawn_sky_particles(Rocket.pos.y + 100, color.white, False, 100, 20)
+    elif Rocket.pos.y >= (AtmosHeight) and Rocket.pos.y >= (AtmosHeight + 500):
+        spawn_sky_particles(Rocket.pos.y + 100, color.white, True, 50, 10)
+    """
+    
+    
+# Main Loop
+def launch_rocket(self):
+    # Disable UI while in motion
+    LaunchButton.disabled = True
+    for sl in sliders:
+        sl.disabled = True
+
+    scene.append_to_caption("\n\n")
+    RocketPositionLabel = wtext(text='Rocket Position: ' + (Rocket.pos))
+    scene.append_to_caption("\n\n")
+    RocketVelocityLabel = wtext(text='Rocket Velocity: ' + (Rocket.velocity))
+    
+    # Prep main loop
+    Launched = True
+    #frame_cap = 120
+    frame_cap = 60 # Requested lower fps by Prof.
+    t = 0.0
+    
+    scene.camera.follow(Rocket)
+    scene.autoscale = False
+    
+    Running = True
+    while(Running):
+        rate(frame_cap)
+        t+=dt
+        
+        phys_proc(t)
+        update_background()
+        scene.camera.pos.y = Rocket.pos.y + 5
+        #if scene.autoscale and scene.fov > pi/4:
+           #scene.autoscale = False
+        
+        # Update Slider Labels in "un-editable" state
+        RMS_text.text = 'Mass of Rocket: {:1.2f}'.format(Rocket.mass)
+        FMS_text.text = 'Mass of Fuel: {:1.2f}'.format(Rocket.mass_fuel)
+        EVS_text.text = 'Exaust Velocity: {:1.2f}'.format(Rocket.velocity_ex)
+        
+        TotalMass_label.text='Total Rocket Mass: {:1.2f}'.format(Rocket.mass_total)
+        
+        # Update position and velocity labels
+        RocketPositionLabel.text='Rocket Position: ' + (Rocket.pos)
+        RocketVelocityLabel.text='Rocket Velocity: ' + (Rocket.velocity)
+        
+        # Graphing
+        gc_time_height.plot(t, Rocket.pos.y)
+        gc_time_mass.plot(t, Rocket.mass_total)
+        gc_time_vel.plot(t, Rocket.velocity.mag)
+
+
+##### UI Components
+## Callback Functions
+def update_rm():
+    RMS_text.text = 'Base Mass of Rocket: {:1.2f}'.format(RocketMassSlider.value)
+    Rocket.mass = RocketMassSlider.value # Update mass to slider value
+    
+    Rocket.mass_og = Rocket.mass + Rocket.mass_fuel # Update original mass to slider value
+    OriginalMass_label.text = 'Original Rocket Mass: {:1.2f}'.format(Rocket.mass_og)
+
+    # Since at the beginning, the Total Mass should be the same as original starting mass
+    Rocket.mass_total = Rocket.mass_og
+    TotalMass_label.text='Total Rocket Mass: {:1.2f}'.format(Rocket.mass_total)
+
+def update_fm():
+    FMS_text.text = 'Mass of Fuel: {:1.2f}'.format(FuelMassSlider.value)
+    Rocket.mass_fuel = FuelMassSlider.value # Update fuel mass to slider value
+    
+    Rocket.mass_og = Rocket.mass + Rocket.mass_fuel # Update original mass to slider value
+    OriginalMass_label.text = 'Original Rocket Mass: {:1.2f}'.format(Rocket.mass_og)
+
+    # Since at the beginning, the Total Mass should be the same as original starting mass
+    Rocket.mass_total = Rocket.mass_og
+    TotalMass_label.text='Total Rocket Mass: {:1.2f}'.format(Rocket.mass_total)
+
+def update_dm_slider():
+    DMS_text.text = 'Rate of Fuel Burn (Const.): {:1.2f}'.format(DeltaMassSlider.value)
+    Rocket.dm = DeltaMassSlider.value # Update fuel mass to slider value
+
+def update_ev():
+    EVS_text.text = 'Exaust Velocity: {:1.2f}'.format(ExaustVelocitySlider.value)
+    Rocket.velocity_ex = ExaustVelocitySlider.value # Update exaust velocity to slider value
+
+def update_rocket_dir():
+    #Rocket.axis = norm(vec(1-abs(sl_rocket_dir_x.value+sl_rocket_dir_z.value), sl_rocket_dir_x.value, sl_rocket_dir_z.value))
+    #Rocket.axis = norm(vec(sl_rocket_dir_y.value, sl_rocket_dir_x.value, sl_rocket_dir_z.value))
+    Rocket.up = norm(vec(sl_rocket_dir_x.value, sl_rocket_dir_y.value, sl_rocket_dir_z.value))
+    
+    Rocket.direction = Rocket.up
+    
+    arr_rocket_face.axis = Rocket.axis * 50
+    arr_rocket_up.axis = Rocket.up * 50
+    arr_rocket_dir.axis = Rocket.direction * 50
+    
+    #Rocket.direction.x = sl_rocket_dir_x.value
+    #Rocket.axis.x = sl_rocket_dir_x.value
+    wt_rocket_dir_x.text='Rocket Tilt X: {:1.2f}'.format(sl_rocket_dir_x.value)
+    
+    wt_rocket_dir_y.text='Rocket Tilt Y: {:1.2f}'.format(sl_rocket_dir_y.value)
+    
+    #Rocket.direction.y = sl_rocket_dir_z.value
+    #Rocket.axis.z = sl_rocket_dir_z.value
+    wt_rocket_dir_z.text='Rocket Tilt Z: {:1.2f}'.format(sl_rocket_dir_z.value)
+    
+    
+
+    
+## Sliders and Slider Labels
+sl_rocket_dir_x = slider(min=-1, max=1, value = 0, step=0.1, bind=update_rocket_dir)
+wt_rocket_dir_x = wtext(text='Rocket Tilt X: {:1.2f}'.format(sl_rocket_dir_x.value))
+scene.append_to_caption("\n")
+sl_rocket_dir_y = slider(min=0, max=1, value = 1, step=0.1, bind=update_rocket_dir)
+wt_rocket_dir_y = wtext(text='Rocket Tilt Y: {:1.2f}'.format(sl_rocket_dir_y.value))
+scene.append_to_caption("\n")
+sl_rocket_dir_z = slider(min=-1, max=1, value = 0, step=0.1, bind=update_rocket_dir)
+wt_rocket_dir_z = wtext(text='Rocket Tilt Z: {:1.2f}'.format(sl_rocket_dir_z.value))
+scene.append_to_caption("\n\n")
+
+RocketMassSlider = slider(min=1, max=10000, value=2500, bind=update_rm)
+RMS_text = wtext(text='Base Mass of Rocket: {:1.2f}'.format(RocketMassSlider.value))
+scene.append_to_caption("\n\n")
+FuelMassSlider = slider(min=0, max=10000, value=1000, bind=update_fm)
+FMS_text = wtext(text='Mass of Fuel: {:1.2f}'.format(FuelMassSlider.value))
+scene.append_to_caption("\n\n")
+
+DeltaMassSlider = slider(min=1, max=1000, value=100, bind=update_dm_slider)
+DMS_text =  wtext(text='Rate of Fuel Burn: {:1.2f}'.format(DeltaMassSlider.value))
+scene.append_to_caption("\n\n")
+#scene.append_to_caption("Type explicit function for dm ")
+#DeltaMassInput = winput(prompt='Explicit function for dm: ', type='string', bind=update_dm_input)
+
+#scene.append_to_caption("\n\n")
+ExaustVelocitySlider = slider(min=1, max=1000, value=200, bind=update_ev)
+EVS_text = wtext(text='Exaust Velocity: {:1.2f}'.format(ExaustVelocitySlider.value))
+scene.append_to_caption("\n\n\n\n")
+
+## Additional Labels
+TotalMass_label = wtext(text='Total Rocket Mass: {:1.2f}'.format(Rocket.mass + Rocket.mass_fuel))
+scene.append_to_caption("\n\n")
+OriginalMass_label = wtext(text='Original Rocket Mass: {:1.2f}'.format(Rocket.mass_og))
+scene.append_to_caption("\n\n")
+
+LaunchButton = button(bind=launch_rocket, text='Launch Rocket', align='left')
+scene.append_to_caption("\n\n")
+
+sliders = [RocketMassSlider, FuelMassSlider, DeltaMassSlider, ExaustVelocitySlider, sl_rocket_dir_x, sl_rocket_dir_y, sl_rocket_dir_z]
+labels = [RMS_text, FMS_text, DMS_text, EVS_text, wt_rocket_dir_x, wt_rocket_dir_y, wt_rocket_dir_z, TotalMass_label, OriginalMass_label]
+
+for sl in sliders:
+    sl.align = 'left'
+for wt in labels:
+    wt.align = 'left'

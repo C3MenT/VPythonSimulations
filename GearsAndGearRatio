@@ -1,0 +1,321 @@
+Web VPython 3.2
+
+# Scene Vars
+dt = 0.01
+frame_cap = 120
+scene.width = 1080
+scene.height = 760
+
+
+# Guide for 1x1 boundary
+PointBox1by1 = points(pos=[
+        vec(0,0,0), vec(1,1,1), vec(1,-1,1), vec(1,-1,-1), vec(-1,1,1), vec(-1,-1,1), vec(-1,-1,-1), vec(1,-1,1), vec(1,1,-1), vec(-1,1,-1)
+    ],
+    color=color.red, emissive=True)
+
+
+# Function for making array of position vecs to align with gear base corners
+# amnt: amount of teeth
+# base_pos: the location of the base cylindrical shape
+# base_rad: radius of the base
+# teeth_width: width of the teeth, used to determine the linear distance from origin to either side of tooth (should be smaller than radius)
+# teeth_scale: scaling length or height of a tooth vertically from origin (should be above 1)
+def MakeVertexPointCoords(amnt, base_pos, base_rad, teeth_width, tooth_length):
+    Amount = amnt
+    
+    # Declare array of vec lists to use as vertex positions for gear teeth meshes
+    TeethVerticeLists = []
+
+    # theta's rate of change should be equally summed up to 360/2pi "amnt-times"
+    # so we need the value that 360 divided by "amnt" is
+    d_theta = 360/Amount # in deg
+    d_theta *= (pi/180) # in rad
+    
+    theta = 0
+    theta_offset = asin(teeth_width/base_rad)
+    
+    # For the amount of teeth passed in, make a list of nine vertices that comprise the mesh of one tooth
+    # This tooth is respective to the current index of amnt we are on
+    # Each tooth vertice list has an origin point, and eight others that make a cube
+    for i in range(amnt):
+        # First, Tooth Origin
+        temp_tooth_vertice_coords = [
+                # First, Tooth Origin (or the bottom center)
+                vec(base_pos.x + base_rad*cos(theta), base_pos.y + base_rad*sin(theta), base_pos.z),
+                
+                # Front-Bottom-Left
+                vec(base_pos.x + base_rad*cos(theta + theta_offset), base_pos.y + base_rad*sin(theta + theta_offset), base_pos.z + 1),
+                # Front-Bottom-Right
+                vec(base_pos.x + base_rad*cos(theta - theta_offset), base_pos.y + base_rad*sin(theta - theta_offset), base_pos.z + 1),
+                # Back-Bottom-Left
+                vec(base_pos.x + base_rad*cos(theta + theta_offset), base_pos.y + base_rad*sin(theta + theta_offset), base_pos.z - 1),
+                # Back-Bottom-Right
+                vec(base_pos.x + base_rad*cos(theta - theta_offset), base_pos.y + base_rad*sin(theta - theta_offset), base_pos.z - 1),
+                
+                # Front-Top-Left
+                vec( (base_pos.x + base_rad * cos(theta + theta_offset)) + (tooth_length * cos(theta)) , (base_pos.y + base_rad * sin(theta + theta_offset)) + (tooth_length * sin(theta)), base_pos.z + 1),
+                # Front-Top-Right
+                vec( (base_pos.x + base_rad * cos(theta - theta_offset)) + (tooth_length * cos(theta)), (base_pos.y + base_rad * sin(theta - theta_offset)) + (tooth_length * sin(theta)), base_pos.z + 1),
+                # Back-Top-Left
+                vec( (base_pos.x + base_rad * cos(theta + theta_offset)) + (tooth_length * cos(theta)) , (base_pos.y + base_rad * sin(theta + theta_offset)) + (tooth_length * sin(theta)), base_pos.z - 1),
+                # Back-Top-Right
+                vec( (base_pos.x + base_rad * cos(theta - theta_offset)) + (tooth_length * cos(theta)), (base_pos.y + base_rad * sin(theta - theta_offset)) + (tooth_length * sin(theta)), base_pos.z - 1),
+            ]
+        # Append future vertice position list to list of lists.
+        # There should be as many entries as "Amount"
+        TeethVerticeLists.append(temp_tooth_vertice_coords)
+        
+        theta += d_theta
+        
+    #print(len(CircumPointCoords))
+    return [TeethVerticeLists, d_theta] #return the vec list with the d_theta for other gear orientation later
+
+    
+# Construct mesh for the gear's teeth based on 
+def MakeGearTeeth(PointCoordListList, base_pos):
+    VertexGroups = [] # List of Vertex Groups per tooth
+    TeethMeshes = [] # List of 5-Quads Groups
+    
+    # Make sure we get the list of vecs and not theta offset
+    for tooth_group in PointCoordListList[0]:
+        # Construct 24 vertices, 4 for each vector of the cube to make "6" (5) unique (independent) faces
+        # We'll give each face a normal via right-hand-rule (AXB=Thumb, A=IndexF, B=MiddleF)
+        # Normals for later
+        n_Front = norm(cross( (tooth_group[1]-tooth_group[5]) , (tooth_group[2]-tooth_group[1]) ))
+        n_Back = norm(cross( (tooth_group[7]-tooth_group[3]) , (tooth_group[4]-tooth_group[3]) ))
+        n_Right = norm(cross( (tooth_group[8]-tooth_group[4]) , (tooth_group[2]-tooth_group[4]) ))
+        n_Left = norm(cross( (tooth_group[3]-tooth_group[1]) , (tooth_group[3]-tooth_group[7]) ))
+        n_Up = norm(cross( (tooth_group[5]-tooth_group[6]) , (tooth_group[5]-tooth_group[7]) ))
+        n_Down = norm(cross( (tooth_group[3]-tooth_group[4]) , (tooth_group[4]-tooth_group[2]) )) # shouldn't have to use down
+        
+        """ GUIDE
+            vertex(pos=tooth_group[1], normal=), # 0: Fnt-Btm-L
+            vertex(pos=tooth_group[2], normal=), # 1: Fnt-Btm-R
+            vertex(pos=tooth_group[3], normal=), # 2: Bck-Btm-L
+            vertex(pos=tooth_group[4], normal=), # 3: Bck-Btm-R
+            vertex(pos=tooth_group[5], normal=), # 4: Fnt-Top-L
+            vertex(pos=tooth_group[6], normal=), # 5: Fnt-Top-R
+            vertex(pos=tooth_group[7], normal=), # 6: Bck-Top-L
+            vertex(pos=tooth_group[8], normal=), # 7: Bck-Top-R
+            vertex(pos=tooth_group[0]) #8: The origin
+        """
+        # skip first vec as it is origin point
+        face_front = quad(vs=[
+            vertex(pos=tooth_group[1], normal=n_Front),
+            vertex(pos=tooth_group[2], normal=n_Front),
+            vertex(pos=tooth_group[6], normal=n_Front),
+            vertex(pos=tooth_group[5], normal=n_Front)
+            ])
+        face_left = quad(vs=[
+            vertex(pos=tooth_group[1], normal=n_Left),
+            vertex(pos=tooth_group[5], normal=n_Left),
+            vertex(pos=tooth_group[7], normal=n_Left),
+            vertex(pos=tooth_group[3], normal=n_Left)
+            ])
+        face_back = quad(vs=[
+            vertex(pos=tooth_group[3], normal=n_Back),
+            vertex(pos=tooth_group[7], normal=n_Back),
+            vertex(pos=tooth_group[8], normal=n_Back),
+            vertex(pos=tooth_group[4], normal=n_Back)
+            ])
+        face_right = quad(vs=[
+            vertex(pos=tooth_group[4], normal=n_Right),
+            vertex(pos=tooth_group[8], normal=n_Right),
+            vertex(pos=tooth_group[6], normal=n_Right),
+            vertex(pos=tooth_group[2], normal=n_Right)
+            ])
+        face_top = quad(vs=[
+            vertex(pos=tooth_group[6], normal=n_Up),
+            vertex(pos=tooth_group[8], normal=n_Up),
+            vertex(pos=tooth_group[7], normal=n_Up),
+            vertex(pos=tooth_group[5], normal=n_Up)
+            ])
+    
+        # Add the group of faces as one mesh entry
+        TeethMeshes.append([face_front, face_left, face_back, face_right, face_top])
+    """    
+        temp_tooth
+        VertexGroups.append(temp_vertices_group)
+        
+        
+    # We make five faces for each side of the tooth but bottom since it's obscured
+    for vert_group in VertexGroups:
+        face_front = quad(vs=[vert_group[0], vert_group[1], vert_group[5], vert_group[4]])
+        face_left = quad(vs=[vert_group[0], vert_group[4], vert_group[6], vert_group[2]])
+        face_back = quad(vs=[vert_group[2], vert_group[6], vert_group[7], vert_group[3]])
+        face_right = quad(vs=[vert_group[1], vert_group[3], vert_group[7], vert_group[5]])
+        face_top = quad(vs=[vert_group[4], vert_group[5], vert_group[7], vert_group[6]])
+    """ 
+   
+    Teeth = []
+    # Now make full tooth compounds and add them to another list
+    for tooth_mesh in TeethMeshes:
+        Teeth.append(compound(tooth_mesh))
+    
+    # finally return all of the teeth combined as one compound
+    return compound(Teeth, pos=base_pos, tooth_theta = PointCoordListList[1])
+
+    
+# Gear Constructor
+def MakeGear(position, num_teeth, core_radius, teeth_width, tooth_length, previous):
+    ext_path = [vec(0,0,0), vec(0,0,2)]
+    NumBaseShapeEdges = 180
+    base_shape = shapes.circle(radius=core_radius, np=NumBaseShapeEdges)
+    
+    """
+    ##### DEBUG #####
+    # Blue points for every base corner for visual referrence 
+    # (since vpython is disgustingly limited each point is a seperate points object)
+    #PointsCircum = points(pos=[], color=color.blue, emissive=True)
+    PointsCircum=[]
+    for list in MakeVertexPointCoords(8, position, core_radius, 0.2, 1.5):
+        PointsCircum.append(points(pos=list, color=color.blue, emissive=True))
+    """
+    # Get full teeth object here to get the teeth theta seperately
+    TeethObj = MakeGearTeeth(MakeVertexPointCoords(num_teeth, position, core_radius, teeth_width, tooth_length), position)
+    return compound(
+        [extrusion(pos=position, shape=base_shape, path=ext_path), TeethObj],
+        color=vec(random(),random(),random()),
+        # Physics Members
+        omega = 0,
+        #mass = 
+        #torque = 0,
+        gear_core_radius = core_radius, 
+        gear_radius = core_radius + tooth_length, 
+        n_teeth = num_teeth,
+        teeth_length = tooth_length, 
+        tooth_angle=TeethObj.tooth_theta, 
+        prev_gear=previous,
+        
+        lb_omega = label(text='ω: ' + 0, pos=position),
+        lb_tau = label(text='𝜏: ' + 0, pos=vec(position.x,position.y-1,position.z))
+        )
+
+# Make first "initial gear" for others to connect to
+Gear1 = MakeGear(vec(0,0,0), 8, 1, 0.2, 0.5, None)
+
+
+##### UI ##### 
+scene.append_to_caption("\n\n")
+sl_motor_rps = slider(bind=update_motor_rps, min=(2*pi)/100, max=(20*pi), value = (2*pi)/100, step=0.1)
+wt_motor_rps = wtext(text="Motor ω: {:1.2f}".format(sl_motor_rps.value) + " rad/s")
+scene.append_to_caption("\n\n")
+sl_motor_gear_radius = slider(bind=update_initial_gear_rad, min=0.1, max=100, step=0.1, value=1)
+wt_motor_gear_radius = wtext(text="Gear 1 Radius: {:1.2f}".format(sl_motor_gear_radius.value))
+
+scene.append_to_caption("\n\n----New Gear Interface----\n\n")
+
+sl_new_gear_rad = slider(bind=update_temp_gear_radius, min=0.2, max=5, step=0.1, value=1)
+wt_new_gear_rad_text = wtext(text="New Gear Radius: {:1.2f}".format(sl_new_gear_rad.value))
+scene.append_to_caption("\n")
+sl_new_gear_teeth = slider(bind=update_temp_gear_teeth, min=2, max=20, step=1, value=8)
+wt_new_gear_teeth = wtext(text="New Gear Teeth: " + sl_new_gear_teeth.value)
+scene.append_to_caption("\n")
+#menu_new_gear_fuse_target = menu(bind=, choices=choicelist)
+
+#scene.append_to_caption("\n\n")
+new_gear_button = button(bind=add_new, text="Add Gear")
+
+
+scene.append_to_caption("\n\n----Start----\n\n")
+start_button = button(bind=start_spin, text='Activate Motor')
+
+##### Callbacks #####
+
+def update_motor_rps():
+    Gear1.omega = sl_motor_rps.value
+    wt_motor_rps.text="Motor ω: {:1.2f}".format(sl_motor_rps.value) + " rad/s"
+
+def update_initial_gear_rad():
+    Gear1.size = vec(sl_motor_gear_radius.value, sl_motor_gear_radius.value, Gear1.size.z) 
+    wt_motor_gear_radius.text = "Gear 1 Radius: {:1.2f}".format(sl_motor_gear_radius.value)
+    
+    Gear1.gear_radius = sl_motor_gear_radius.value
+    Gear1.core_radius = sl_motor_gear_radius.value - Gear1.teeth_length
+
+
+### New Gears ###
+# reference to the last created gear
+GlobalContainer = sphere(visible=False,
+    previous_gear = Gear1,
+    gears = [Gear1]
+)
+# Since callbacks can only use information gotten at runtime we need a getter and setter for the global
+def get_previous_gear():
+    return GlobalContainer.previous_gear
+def set_previous_gear(value):
+    GlobalContainer.previous_gear = value
+def get_current_gears():
+    return GlobalContainer.gears
+def append_to_current_gears(value):
+    GlobalContainer.gears.append(value)
+    
+def update_temp_gear_radius():
+    temp_gear_radius = sl_new_gear_rad.value
+    wt_new_gear_rad_text.text="New Gear Radius: {:1.2f}".format(sl_new_gear_rad.value)
+def update_temp_gear_teeth():
+    wt_new_gear_teeth.text="New Gear Teeth: " + sl_new_gear_teeth.value
+    
+def add_new(self):
+    print("Beginning Gear Construction")
+    #print("First gear core rad: " +  get_previous_gear().gear_core_radius + '\n' + "First gear rad: " + get_previous_gear().gear_radius)
+    
+    temp_gear = MakeGear(vec(get_previous_gear().pos.x + cos(get_previous_gear().tooth_angle) * (get_previous_gear().gear_radius + sl_new_gear_rad.value), get_previous_gear().pos.y + sin(get_previous_gear().tooth_angle) * (get_previous_gear().gear_radius + sl_new_gear_rad.value), 0), sl_new_gear_teeth.value, sl_new_gear_rad.value, 0.2, 0.5, get_previous_gear())
+    if len(get_current_gears()) % 2 != 0:
+        temp_gear.rotate(axis=vec(0,0,1), angle=get_previous_gear().tooth_angle/2)
+    
+    append_to_current_gears(temp_gear)
+    set_previous_gear(temp_gear)
+    
+    print("Gear Added")
+    print(get_previous_gear().pos)
+
+"""
+## Mouse Handling
+mouse_down = False
+def on_mouse_down(self):
+    print(scene.mouse.pick)
+    mouse_down = True
+def on_mouse_up(self):
+    mouse_down = False
+scene.bind('mousedown', on_mouse_down)
+scene.bind('mouseup', on_mouse_up)
+"""
+
+# Physics Process for main init
+def phys_proc(self):
+    for gear in get_current_gears():
+        if gear.prev_gear != None:
+            #gear_ratio = gear.omega/gear.prev_gear.omega
+            gear_ratio = gear.n_teeth/gear.prev_gear.n_teeth
+            altered_omega = gear.prev_gear.omega * gear_ratio * -1 # * -1 to reverse
+            gear.rotate(axis=vec(0,0,1), angle=altered_omega * dt)
+            
+            gear.omega = altered_omega
+            gear.tau = (gear.prev_gear.omega/gear.omega)*gear.prev_gear.tau
+        else:
+            gear.rotate(axis=vec(0,0,1), angle=gear.omega * dt)
+            gear.tau = 10 #placeholder
+            
+        # Display Omegas and Torques
+        gear.lb_omega.text='ω: ' + gear.omega
+        gear.lb_tau.text='𝜏: ' + gear.tau
+        
+        
+##### Physics Init #####
+def start_spin():
+    t = 0
+    
+    ##### Init
+    while(True):
+        rate(frame_cap)
+        
+        phys_proc()
+
+
+##### Main Loop #####
+while(True):
+    rate(frame_cap)
+    #if (scene.mouse.pick != None) and mouse_down == True:
+     #   print(scene.mouse.pick)
+
